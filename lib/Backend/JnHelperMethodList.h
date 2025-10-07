@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // Copyright (C) Microsoft. All rights reserved.
-// Copyright (c) 2021 ChakraCore Project Contributors. All rights reserved.
+// Copyright (c) ChakraCore Project Contributors. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 //-------------------------------------------------------------------------------------------------------
 #ifndef HELPERCALL
@@ -486,7 +486,7 @@ HELPERCALLCHK(Array_VarPush, Js::JavascriptArray::Push, 0)
 HELPERCALLCHK(Array_NativeIntPush, Js::JavascriptNativeIntArray::Push, 0)
 HELPERCALLCHK(Array_NativeFloatPush, Js::JavascriptNativeFloatArray::Push, 0)
 HELPERCALLCHK(Array_VarPop, Js::JavascriptArray::Pop, 0)
-HELPERCALLCHK(Array_NativePopWithNoDst, Js::JavascriptNativeArray::PopWithNoDst, AttrCanNotBeReentrant)
+HELPERCALLCHK(Array_NativePopWithNoDst, Js::JavascriptNativeArray::PopWithNoDst, 0)
 HELPERCALLCHK(Array_NativeIntPop, Js::JavascriptNativeIntArray::Pop, AttrCanNotBeReentrant)
 HELPERCALLCHK(Array_NativeFloatPop, Js::JavascriptNativeFloatArray::Pop, AttrCanNotBeReentrant)
 HELPERCALLCHK(Array_Reverse, Js::JavascriptArray::EntryReverse, 0)
@@ -525,6 +525,7 @@ HELPERCALL(String_PadStart, Js::JavascriptString::EntryPadStart, 0)
 HELPERCALL(String_PadEnd, Js::JavascriptString::EntryPadEnd, 0)
 HELPERCALLCHK(GlobalObject_ParseInt, Js::GlobalObject::EntryParseInt, 0)
 HELPERCALLCHK(Object_HasOwnProperty, Js::JavascriptObject::EntryHasOwnProperty, 0)
+HELPERCALLCHK(Object_HasOwn, Js::JavascriptObject::EntryHasOwn, 0)
 
 HELPERCALL(RegExp_SplitResultUsed, Js::RegexHelper::RegexSplitResultUsed, 0)
 HELPERCALL(RegExp_SplitResultUsedAndMayBeTemp, Js::RegexHelper::RegexSplitResultUsedAndMayBeTemp, 0)

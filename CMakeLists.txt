@@ -7,9 +7,13 @@ set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g")
 option(CHAKRACORE_BUILD_SH "Use build.sh")
 
 if(NOT CHAKRACORE_BUILD_SH)
+    option(DISABLE_JIT "Disable JIT compilation" OFF)
     option(INTL_ICU "Enable Intl" ON)
     option(EMBED_ICU "Build ICU within ChakraCore build" OFF)
     set(ICU_INCLUDE_PATH "" CACHE STRING "libicu iclude path")
+    if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+      set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type" FORCE)
+    endif (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 else(NOT CHAKRACORE_BUILD_SH)
 
     # Keep CMake from caching static/shared library
@@ -35,6 +39,12 @@ else(NOT CHAKRACORE_BUILD_SH)
         unset(LIBS_ONLY_BUILD_SH CACHE)
         set(CC_LIBS_ONLY_BUILD 1)
     endif()
+
+    if (CLANG_SANITIZE_SH)
+        set(CLANG_SANITIZE ${CLANG_SANITIZE_SH})
+        unset(CLANG_SANITIZE_SH CACHE)
+    endif()
+
 endif(NOT CHAKRACORE_BUILD_SH)
 
 if(CC_USES_SYSTEM_ARCH_SH OR NOT CHAKRACORE_BUILD_SH)
@@ -42,6 +52,8 @@ if(CC_USES_SYSTEM_ARCH_SH OR NOT CHAKRACORE_BUILD_SH)
         set(CC_TARGETS_AMD64_SH 1)
     elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
         set(CC_TARGETS_ARM_SH 1)
+    elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+        set(CC_TARGETS_ARM64_SH 1)
     endif()
     unset(CC_USES_SYSTEM_ARCH_SH CACHE)
 endif()
@@ -52,6 +64,11 @@ elseif(CC_TARGETS_ARM_SH)
     set(CC_TARGETS_ARM 1)
     add_definitions(-D_ARM_=1)
     set(CMAKE_SYSTEM_PROCESSOR "armv7l")
+elseif(CC_TARGETS_ARM64_SH)
+    add_definitions(-D_ARM64_=1)
+    add_definitions(-D__arm64__=1)
+    set(CC_TARGETS_ARM64 1)
+    set(CMAKE_SYSTEM_PROCESSOr "arm64")
 elseif(CC_TARGETS_X86_SH)
     set(CC_TARGETS_X86 1)
     set(CMAKE_SYSTEM_PROCESSOR "i386")
@@ -269,8 +286,15 @@ elseif(CC_TARGETS_ARM)
         # reduce link time memory usage
         set(LINKER_REDUCED_MEMORY "-Xlinker --no-keep-memory")
     endif()
+elseif(CC_TARGETS_ARM64)
+    add_definitions(-D__aarch64__)
+    add_definitions(-DTARGET_64)
+    add_definitions(-D_M_ARM32_OR_ARM64)
+    if(CC_TARGET_OS_OSX)
+        add_compile_options(-arch arm64)
+    endif()
 else()
-    message(FATAL_ERROR "Only AMD64, ARM and I386 are supported")
+    message(FATAL_ERROR "Only AMD64, ARM, ARM64 and I386 are supported")
 endif()
 
 if(CAN_BUILD_WABT)
@@ -337,7 +361,10 @@ if(CLR_CMAKE_PLATFORM_XPLAT)
     if(CC_TARGETS_AMD64)
         set(IS_64BIT_BUILD 1)
         add_definitions(-D_M_X64 -D_M_AMD64 -D_AMD64_)
-    endif(CC_TARGETS_AMD64)
+    elseif(CC_TARGETS_ARM64)
+        set(IS_64BIT_BUILD 1)
+        add_definitions(-D_M_ARM64 -D_ARM64_)
+    endif()
 
     add_definitions(
         -DUNICODE
@@ -491,6 +518,16 @@ else()
     set(DYN_LIB_EXT "so")
 endif()
 
+if(CC_TARGETS_ARM64)
+    if(CC_TARGET_OS_LINUX)
+        message(WARNING "ARM64 linux build has not yet been tested, this build is unsupported.")
+    endif()
+    if(BuildJIT)
+        message(WARNING "ARM64 Jit not yet functional on platforms other than windows.")
+        message(WARNING "For use rather than development please build with Jit disabled --no-jit with ./build.sh or -DDISABLE_JIT=1 if using CMake directly")
+    endif()
+endif()
+
 ################# Write-barrier check/analyze ##################
 if (WB_CHECK_SH OR WB_ANALYZE_SH)
     add_definitions(
@@ -542,12 +579,11 @@ endif()
 include_directories(SYSTEM /usr/local/include)
 include(pal/src/configure.cmake)
 
-# this should be after `detect feature` to not to affect feature detection
-# Clang -fsanitize.
-if (CLANG_SANITIZE_SH)
+# Clang sanitizer support, this should be after `detect feature` to not to
+# affect feature detection
+if (CLANG_SANITIZE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=${CLANG_SANITIZE_SH}")
     set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -fsanitize=${CLANG_SANITIZE_SH}")
-    unset(CLANG_SANITIZE_SH CACHE)      # don't cache
 endif()
 
 add_subdirectory (pal)

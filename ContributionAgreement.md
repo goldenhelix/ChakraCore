@@ -41,4 +41,7 @@ This agreement has been signed by:
 |Evgeniy Istomin|MadProbe|
 |Wenlu Wang| Kingwl|
 |Kevin Cadieux|kevcadieux|
+|Ryoichi Kaida| camcam-lemon|
+|Lukas Kurz| ShortDevelopment|
+|Paul Pluzhnikov|EmployedRussian|
 |Aidan Bickford| BickfordA|

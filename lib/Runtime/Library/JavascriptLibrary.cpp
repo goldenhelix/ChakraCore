@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // Copyright (C) Microsoft Corporation and contributors. All rights reserved.
-// Copyright (c) 2021 ChakraCore Project Contributors. All rights reserved.
+// Copyright (c) ChakraCore Project Contributors. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 //-------------------------------------------------------------------------------------------------------
 
@@ -1707,6 +1707,7 @@ namespace Js
         JsBuiltInEngineInterfaceExtensionObject* builtInExtension = RecyclerNew(recycler, JsBuiltInEngineInterfaceExtensionObject, scriptContext);
         engineInterfaceObject->SetEngineExtension(EngineInterfaceExtensionKind_JsBuiltIn, builtInExtension);
         this->isArrayFunction = this->DefaultCreateFunction(&JavascriptArray::EntryInfo::IsArray, 1, nullptr, nullptr, PropertyIds::isArray);
+        builtinFuncs[BuiltinFunction::JavascriptArray_IsArray] = this->isArrayFunction;
 #endif
 
 #endif
@@ -1902,7 +1903,6 @@ namespace Js
         library->AddMember(arrayConstructor, PropertyIds::name, scriptContext->GetPropertyString(PropertyIds::Array), PropertyConfigurable);
 
 #ifdef ENABLE_JS_BUILTINS
-        builtinFuncs[BuiltinFunction::JavascriptArray_IsArray] = library->isArrayFunction;
         library->AddMember(arrayConstructor, PropertyIds::isArray, library->isArrayFunction);
 #else
         library->AddFunctionToLibraryObject(arrayConstructor, PropertyIds::isArray, &JavascriptArray::EntryInfo::IsArray, 1);
@@ -2078,8 +2078,9 @@ namespace Js
         {
             builtinFuncs[BuiltinFunction::JavascriptArray_IndexOf] = library->AddFunctionToLibraryObject(arrayPrototype, PropertyIds::indexOf, &JavascriptArray::EntryInfo::IndexOf, 1);
             builtinFuncs[BuiltinFunction::JavascriptArray_Includes] = library->AddFunctionToLibraryObject(arrayPrototype, PropertyIds::includes, &JavascriptArray::EntryInfo::Includes, 1);
-            /* No inlining                Array_Sort               */ library->AddFunctionToLibraryObject(arrayPrototype, PropertyIds::sort, &JavascriptArray::EntryInfo::Sort, 1);
         }
+
+        /* No inlining                Array_Sort               */ library->AddFunctionToLibraryObject(arrayPrototype, PropertyIds::sort, &JavascriptArray::EntryInfo::Sort, 1);
 
         builtinFuncs[BuiltinFunction::JavascriptArray_LastIndexOf]    = library->AddFunctionToLibraryObject(arrayPrototype, PropertyIds::lastIndexOf,     &JavascriptArray::EntryInfo::LastIndexOf,       1);
         /* No inlining                Array_Map            */ library->AddFunctionToLibraryObject(arrayPrototype, PropertyIds::map,             &JavascriptArray::EntryInfo::Map,               1);
@@ -2598,10 +2599,7 @@ namespace Js
         library->AddMember(symbolConstructor, PropertyIds::length, TaggedInt::ToVarUnchecked(0), PropertyConfigurable);
         library->AddMember(symbolConstructor, PropertyIds::prototype, library->symbolPrototype, PropertyNone);
         library->AddMember(symbolConstructor, PropertyIds::name, scriptContext->GetPropertyString(PropertyIds::Symbol), PropertyConfigurable);
-        if (scriptContext->GetConfig()->IsES6HasInstanceEnabled())
-        {
-            library->AddMember(symbolConstructor, PropertyIds::hasInstance, library->GetSymbolHasInstance(), PropertyNone);
-        }
+        library->AddMember(symbolConstructor, PropertyIds::hasInstance, library->GetSymbolHasInstance(), PropertyNone);
         if (scriptContext->GetConfig()->IsES6IsConcatSpreadableEnabled())
         {
             library->AddMember(symbolConstructor, PropertyIds::isConcatSpreadable, library->GetSymbolIsConcatSpreadable(), PropertyNone);
@@ -3196,14 +3194,11 @@ namespace Js
         builtinFuncs[BuiltinFunction::JavascriptFunction_Call] = func;
         library->AddFunctionToLibraryObject(functionPrototype, PropertyIds::toString, &JavascriptFunction::EntryInfo::ToString, 0);
 
-        if (scriptContext->GetConfig()->IsES6HasInstanceEnabled())
-        {
-            scriptContext->SetBuiltInLibraryFunction(JavascriptFunction::EntryInfo::SymbolHasInstance.GetOriginalEntryPoint(),
-                                                     library->AddFunctionToLibraryObjectWithName(functionPrototype, PropertyIds::_symbolHasInstance, PropertyIds::_RuntimeFunctionNameId_hasInstance,
-                                                                                                 &JavascriptFunction::EntryInfo::SymbolHasInstance, 1));
-            functionPrototype->SetWritable(PropertyIds::_symbolHasInstance, false);
-            functionPrototype->SetConfigurable(PropertyIds::_symbolHasInstance, false);
-        }
+        scriptContext->SetBuiltInLibraryFunction(JavascriptFunction::EntryInfo::SymbolHasInstance.GetOriginalEntryPoint(),
+                                                    library->AddFunctionToLibraryObjectWithName(functionPrototype, PropertyIds::_symbolHasInstance, PropertyIds::_RuntimeFunctionNameId_hasInstance,
+                                                                                                &JavascriptFunction::EntryInfo::SymbolHasInstance, 1));
+        functionPrototype->SetWritable(PropertyIds::_symbolHasInstance, false);
+        functionPrototype->SetConfigurable(PropertyIds::_symbolHasInstance, false);
 
         functionPrototype->DynamicObject::SetAccessors(PropertyIds::caller, library->throwTypeErrorRestrictedPropertyAccessorFunction, library->throwTypeErrorRestrictedPropertyAccessorFunction);
         functionPrototype->SetEnumerable(PropertyIds::caller, false);
@@ -3876,6 +3871,9 @@ namespace Js
         case PropertyIds::hasOwnProperty:
             return BuiltinFunction::JavascriptObject_HasOwnProperty;
 
+        case PropertyIds::hasOwn:
+            return BuiltinFunction::JavascriptObject_HasOwn;
+
         default:
             return BuiltinFunction::None;
         }
@@ -4129,7 +4127,7 @@ namespace Js
         // so that the update is in sync with profiler
         JavascriptLibrary* library = objectConstructor->GetLibrary();
         ScriptContext* scriptContext = objectConstructor->GetScriptContext();
-        int propertyCount = 18;
+        int propertyCount = 19;
         if (scriptContext->GetConfig()->IsES6ObjectExtensionsEnabled())
         {
             propertyCount += 2;
@@ -4207,6 +4205,9 @@ namespace Js
             scriptContext->SetBuiltInLibraryFunction(JavascriptObject::EntryInfo::Entries.GetOriginalEntryPoint(),
                 library->AddFunctionToLibraryObject(objectConstructor, PropertyIds::entries, &JavascriptObject::EntryInfo::Entries, 1));
         }
+
+        scriptContext->SetBuiltInLibraryFunction(JavascriptObject::EntryInfo::HasOwn.GetOriginalEntryPoint(),
+            library->AddFunctionToLibraryObject(objectConstructor, PropertyIds::hasOwn, &JavascriptObject::EntryInfo::HasOwn, 2));
 
 #ifdef ENABLE_JS_BUILTINS
         if (scriptContext->IsJsBuiltInEnabled())
@@ -7505,7 +7506,7 @@ namespace Js
         return hr;
     }
 
-     HRESULT JavascriptLibrary::ProfilerRegisterObject()
+    HRESULT JavascriptLibrary::ProfilerRegisterObject()
     {
         HRESULT hr = S_OK;
 
@@ -7537,6 +7538,7 @@ namespace Js
 
         REG_OBJECTS_LIB_FUNC(getOwnPropertySymbols, JavascriptObject::EntryGetOwnPropertySymbols);
 
+        REG_OBJECTS_LIB_FUNC(hasOwn, JavascriptObject::EntryHasOwn);
         REG_OBJECTS_LIB_FUNC(hasOwnProperty, JavascriptObject::EntryHasOwnProperty);
         REG_OBJECTS_LIB_FUNC(propertyIsEnumerable, JavascriptObject::EntryPropertyIsEnumerable);
         REG_OBJECTS_LIB_FUNC(isPrototypeOf, JavascriptObject::EntryIsPrototypeOf);

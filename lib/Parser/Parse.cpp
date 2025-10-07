@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // Copyright (C) Microsoft. All rights reserved.
-// Copyright (c) 2021 ChakraCore Project Contributors. All rights reserved.
+// Copyright (c) ChakraCore Project Contributors. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 //-------------------------------------------------------------------------------------------------------
 #include "ParserPch.h"
@@ -5483,7 +5483,7 @@ ParseNodeFnc * Parser::ParseFncDeclInternal(ushort flags, LPCOLESTR pNameHint, c
             {
                 // Class member methods have optional separators. We need to check whether we are
                 // getting the IchLim of the correct token.
-                Assert(this->GetScanner()->m_tkPrevious == tkRCurly && needScanRCurly);
+                Assert(this->GetScanner()->GetPrevious() == tkRCurly && needScanRCurly);
 
                 this->m_funcInArray += this->GetScanner()->IchMinTok() - /*tkRCurly*/ 1 - ichMin;
             }
@@ -6529,7 +6529,7 @@ bool Parser::FastScanFormalsAndBody()
         {
             int opl;
             OpCode nop;
-            tokens tkPrev = this->GetScanner()->m_tkPrevious;
+            tokens tkPrev = this->GetScanner()->GetPrevious();
             if ((this->GetHashTbl()->TokIsBinop(tkPrev, &opl, &nop) && nop != knopNone) ||
                 (this->GetHashTbl()->TokIsUnop(tkPrev, &opl, &nop) &&
                     nop != knopNone &&
@@ -10170,13 +10170,9 @@ LRestart:
     {
     case tkEOF:
         if (labelledStatement)
-        {
             Error(ERRLabelFollowedByEOF);
-        }
-        if (buildAST)
-        {
-            pnode = nullptr;
-        }
+        else
+            Error(ERRsyntaxEOF);
         break;
 
     case tkFUNCTION:
@@ -11271,6 +11267,12 @@ LNeedTerminator:
     default:
         if (!this->GetScanner()->FHadNewLine())
         {
+            Token previous = this->GetScanner()->GetPreviousToken();
+            if (tkID == previous.tk && wellKnownPropertyPids.await == previous.GetIdentifier(this->GetHashTbl()))
+            {
+                Error(ERRBadAwait);
+            }
+
             Error(ERRnoSemic);
         }
         else

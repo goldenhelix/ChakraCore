@@ -1,6 +1,7 @@
 #!/bin/bash
 #-------------------------------------------------------------------------------------------------------
 # Copyright (C) Microsoft. All rights reserved.
+# Copyright (c) ChakraCore Project Contributors. All rights reserved.
 # Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 #-------------------------------------------------------------------------------------------------------
 
@@ -121,13 +122,13 @@ WB_CHECK=
 WB_ANALYZE=
 WB_ARGS=
 TARGET_PATH=0
-VALGRIND=0
+VALGRIND=""
 # -DCMAKE_EXPORT_COMPILE_COMMANDS=ON useful for clang-query tool
 CMAKE_EXPORT_COMPILE_COMMANDS="-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 LIBS_ONLY_BUILD=
 ALWAYS_YES=
 CCACHE_NAME=
-PYTHON2_BINARY=$(which python2.7 || which python2 || which python 2> /dev/null)
+PYTHON_BINARY=$(which python3 || which python || which python2.7 || which python2 || which python 2> /dev/null)
 
 UNAME_S=`uname -s`
 if [[ $UNAME_S =~ 'Linux' ]]; then
@@ -538,7 +539,7 @@ export TARGET_PATH
 
 if [[ $HAS_LTTNG == 1 ]]; then
     CHAKRACORE_ROOT=`dirname $0`
-    "$PYTHON2_BINARY" $CHAKRACORE_ROOT/tools/lttng.py --man $CHAKRACORE_ROOT/manifests/Microsoft-Scripting-Chakra-Instrumentation.man --intermediate $TARGET_PATH/intermediate
+    "$PYTHON_BINARY" $CHAKRACORE_ROOT/tools/lttng.py --man $CHAKRACORE_ROOT/manifests/Microsoft-Scripting-Chakra-Instrumentation.man --intermediate $TARGET_PATH/intermediate
     mkdir -p $TARGET_PATH/lttng
     (diff -q $TARGET_PATH/intermediate/lttng/jscriptEtw.h $TARGET_PATH/lttng/jscriptEtw.h && echo "jscriptEtw.h up to date; skipping") || cp $TARGET_PATH/intermediate/lttng/* $TARGET_PATH/lttng/
 fi
@@ -553,8 +554,8 @@ fi
 BUILD_DIRECTORY="${TARGET_PATH}/${BUILD_TYPE_DIR:0}"
 echo "Build path: ${BUILD_DIRECTORY}"
 
-BUILD_RELATIVE_DIRECTORY=$("$PYTHON2_BINARY" -c "import os.path;print \
-    os.path.relpath('${CHAKRACORE_DIR}', '$BUILD_DIRECTORY')")
+BUILD_RELATIVE_DIRECTORY=$("$PYTHON_BINARY" -c "from __future__ import print_function; import os.path;\
+    print(os.path.relpath('${CHAKRACORE_DIR}', '$BUILD_DIRECTORY'))")
 
 ################# Write-barrier check/analyze run #################
 WB_FLAG=
@@ -619,6 +620,9 @@ if [[ $ARCH =~ "x86" ]]; then
 elif [[ $ARCH =~ "arm" ]]; then
     ARCH="-DCC_TARGETS_ARM_SH=1"
     echo "Compile Target : arm"
+elif [[ $ARCH =~ "arm64" ]]; then
+    ARCH="-DCC_TARGETS_ARM64_SH=1"
+    echo "Compile Target : arm64"
 elif [[ $ARCH =~ "amd64" ]]; then
     ARCH="-DCC_TARGETS_AMD64_SH=1"
     echo "Compile Target : amd64"

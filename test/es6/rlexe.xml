@@ -2,6 +2,12 @@
 <regress-exe>
   <test>
     <default>
+      <files>instanceOfProto.js</files>
+      <compile-flags>-args summary -endargs</compile-flags>
+    </default>
+  </test>
+  <test>
+    <default>
       <files>bug_issue_2747.js</files>
     </default>
   </test>
@@ -102,12 +108,6 @@
   </test>
   <test>
     <default>
-      <files>unscopablesWithEsArrayFindFromLastTest.js</files>
-      <compile-flags>-ESArrayFindFromLast -args summary -endargs</compile-flags>
-    </default>
-  </test>
-  <test>
-    <default>
       <files>function.name.js</files>
       <compile-flags>-ES6Generators -es6functionnamefull -args summary -endargs</compile-flags>
     </default>
@@ -130,48 +130,6 @@
       <files>toStringTag.js</files>
       <compile-flags>-args summary -endargs</compile-flags>
       <tags>exclude_dynapogo</tags>
-    </default>
-  </test>
-  <test>
-    <default>
-      <files>generator-jit-bugs.js</files>
-      <compile-flags>-JitES6Generators -args summary -endargs</compile-flags>
-      <tags>exclude_nonative</tags>
-    </default>
-  </test>
-  <test>
-    <default>
-      <files>generator-jit-bugs.js</files>
-      <compile-flags>-JitES6Generators -off:simplejit -args summary -endargs</compile-flags>
-      <tags>exclude_nonative</tags>
-    </default>
-  </test>
-  <test>
-    <default>
-      <files>generator-jit-bugs.js</files>
-      <compile-flags>-JitES6Generators -off:fulljit -args summary -endargs</compile-flags>
-      <tags>exclude_nonative, exclude_dynapogo</tags>
-    </default>
-  </test>
-  <test>
-    <default>
-      <files>async-jit-bugs.js</files>
-      <compile-flags>-JitES6Generators -args summary -endargs</compile-flags>
-      <tags>exclude_nonative</tags>
-    </default>
-  </test>
-  <test>
-    <default>
-      <files>async-jit-bugs.js</files>
-      <compile-flags>-JitES6Generators -off:simplejit -args summary -endargs</compile-flags>
-      <tags>exclude_nonative</tags>
-    </default>
-  </test>
-  <test>
-    <default>
-      <files>async-jit-bugs.js</files>
-      <compile-flags>-JitES6Generators -off:fulljit -args summary -endargs</compile-flags>
-      <tags>exclude_nonative, exclude_dynapogo</tags>
     </default>
   </test>
   <test>
@@ -913,7 +871,6 @@
   <test>
     <default>
       <files>generators-functionality.js</files>
-      <!-- <compile-flags>-ES6Generators -JitES6Generators -args summary -endargs</compile-flags> -->
       <compile-flags>-ES6Generators -args summary -endargs</compile-flags>
       <tags>exclude_arm</tags>
     </default>

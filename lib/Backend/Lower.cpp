@@ -1,5 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // Copyright (C) Microsoft Corporation and contributors. All rights reserved.
+// Copyright (c) ChakraCore Project Contributors. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 //-------------------------------------------------------------------------------------------------------
 #include "Backend.h"
@@ -5466,7 +5467,7 @@ Lowerer::LowerPrologEpilog()
     instr = m_func->m_exitInstr;
     AssertMsg(instr->IsExitInstr(), "Last instr isn't an ExitInstr...");
 
-    if (m_func->GetJITFunctionBody()->IsCoroutine())
+    if (m_func->GetJITFunctionBody()->IsCoroutine() && !m_func->IsLoopBody())
     {
         IR::LabelInstr* epilogueLabel = this->m_lowerGeneratorHelper.GetEpilogueForReturnStatements();
         this->m_lowerGeneratorHelper.InsertNullOutGeneratorFrameInEpilogue(epilogueLabel);
@@ -11526,6 +11527,7 @@ Lowerer::LowerArgIn(IR::Instr *instrArgIn)
 
             if (m_func->GetJITFunctionBody()->IsCoroutine())
             {
+                AssertMsg(!m_func->IsLoopBody(), "LoopBody Jit should not involve Rest params");
                 generatorArgsPtrOpnd = LoadGeneratorArgsPtr(instrArgIn);
             }
 
@@ -11543,7 +11545,7 @@ Lowerer::LowerArgIn(IR::Instr *instrArgIn)
     if (argIndex == 1)
     {
         // The "this" argument is not source-dependent and doesn't need to be checked.
-        if (m_func->GetJITFunctionBody()->IsCoroutine())
+        if (m_func->GetJITFunctionBody()->IsCoroutine() && !m_func->IsLoopBody())
         {
             generatorArgsPtrOpnd = LoadGeneratorArgsPtr(instrArgIn);
             ConvertArgOpndIfGeneratorFunction(instrArgIn, generatorArgsPtrOpnd);
@@ -12358,6 +12360,7 @@ Lowerer::GenerateHelperToArrayPopFastPath(IR::Instr * instr, IR::LabelInstr * do
     IR::JnHelperMethod helperMethod;
 
     //Decide the helperMethod based on dst availability and nativity of the array.
+    // ToDo: Maybe ignore fast path if `JavascriptArray::HasAnyES5ArrayInPrototypeChain`. See #6582 and #6824.
     if(arrayValueType.IsLikelyNativeArray() && !instr->GetDst())
     {
         helperMethod = IR::HelperArray_NativePopWithNoDst;
@@ -12377,11 +12380,7 @@ Lowerer::GenerateHelperToArrayPopFastPath(IR::Instr * instr, IR::LabelInstr * do
 
     m_lowererMD.LoadHelperArgument(instr, arrayHelperOpnd);
 
-    //We do not need scriptContext for HelperArray_NativePopWithNoDst call.
-    if(helperMethod != IR::HelperArray_NativePopWithNoDst)
-    {
-        LoadScriptContext(instr);
-    }
+    LoadScriptContext(instr);
 
     IR::Instr * retInstr = m_lowererMD.ChangeToHelperCall(instr, helperMethod, bailOutLabelHelper);
 
@@ -22154,8 +22153,12 @@ Lowerer::GenerateFastArgumentsLdElemI(IR::Instr* ldElem, IR::LabelInstr *labelFa
     //  ---GenerateLdValueFromCheckedIndexOpnd
     //  ---LoadInputParamCount
     //  CMP actualParamOpnd, valueOpnd //Compare between the actual count & the index count (say i in arguments[i])
-    //  JLE $labelCreateHeapArgs
+    //  JLE $labelReturnUndefined
     //  MOV dst, ebp [(valueOpnd + 5) *4]  // 5 for the stack layout
+    //  JMP $fallthrough
+    //
+    //labelReturnUndefined:
+    //  MOV dst, undefined
     //  JMP $fallthrough
     //
     //labelCreateHeapArgs:
@@ -22179,12 +22182,23 @@ Lowerer::GenerateFastArgumentsLdElemI(IR::Instr* ldElem, IR::LabelInstr *labelFa
 
     bool hasIntConstIndex = indirOpnd->TryGetIntConstIndexValue(true, &value, &isNotInt);
 
-    if (isNotInt || (isInlinee && hasIntConstIndex && value >= (ldElem->m_func->actualCount - 1)))
+    if (isNotInt)
     {
-        //Outside the range of actuals, skip
+        //Not an int disable optimisation and rejit
     }
-    else if (labelFallThru != nullptr && !(hasIntConstIndex && value < 0)) //if index is not a negative int constant
+    else if (hasIntConstIndex && (value < 0 || (isInlinee && value >= (ldElem->m_func->actualCount - 1))))
     {
+        // if the index is an int const outside the range then the value must be undefined
+        // this is ensured as GlobOpt::OptArguments disables the Arguments optimisation if the arguments object is modified
+        IR::Opnd *undef = LoadLibraryValueOpnd(ldElem, LibraryValue::ValueUndefined);
+        Lowerer::InsertMove(ldElem->GetDst(), undef, ldElem);
+        // JMP $done
+        InsertBranch(Js::OpCode::Br, labelFallThru, ldElem);
+        emittedFastPath = true;
+    }
+    else if (labelFallThru != nullptr)
+    {
+        IR::LabelInstr *labelReturnUndefined = IR::LabelInstr::New(Js::OpCode::Label, func, true);
         if (isInlinee)
         {
             actualParamOpnd = IR::IntConstOpnd::New(ldElem->m_func->actualCount - 1, TyInt32, func);
@@ -22203,7 +22217,7 @@ Lowerer::GenerateFastArgumentsLdElemI(IR::Instr* ldElem, IR::LabelInstr *labelFa
         }
         else
         {
-            //Load valueOpnd from the index
+            //Load valueOpnd from the index, note this operation includes a bail-out for non-integer indices
             valueOpnd =
                 m_lowererMD.LoadNonnegativeIndex(
                     indexOpnd,
@@ -22215,8 +22229,8 @@ Lowerer::GenerateFastArgumentsLdElemI(IR::Instr* ldElem, IR::LabelInstr *labelFa
                         true
 #endif
                         ),
-                    labelCreateHeapArgs,
-                    labelCreateHeapArgs,
+                    labelReturnUndefined,
+                    labelReturnUndefined,
                     ldElem);
         }
 
@@ -22224,13 +22238,13 @@ Lowerer::GenerateFastArgumentsLdElemI(IR::Instr* ldElem, IR::LabelInstr *labelFa
         {
             if (!hasIntConstIndex)
             {
-                //Runtime check if to make sure length is within the arguments.length range.
-                GenerateCheckForArgumentsLength(ldElem, labelCreateHeapArgs, valueOpnd, actualParamOpnd, Js::OpCode::BrGe_A);
+                //Runtime check to make sure length is within the arguments.length range.
+                GenerateCheckForArgumentsLength(ldElem, labelReturnUndefined, valueOpnd, actualParamOpnd, Js::OpCode::BrGe_A);
             }
         }
         else
         {
-            GenerateCheckForArgumentsLength(ldElem, labelCreateHeapArgs, actualParamOpnd, valueOpnd, Js::OpCode::BrLe_A);
+            GenerateCheckForArgumentsLength(ldElem, labelReturnUndefined, actualParamOpnd, valueOpnd, Js::OpCode::BrLe_A);
         }
 
         IR::Opnd *argIndirOpnd = nullptr;
@@ -22244,9 +22258,16 @@ Lowerer::GenerateFastArgumentsLdElemI(IR::Instr* ldElem, IR::LabelInstr *labelFa
         }
 
         Lowerer::InsertMove(ldElem->GetDst(), argIndirOpnd, ldElem);
-
         // JMP $done
         InsertBranch(Js::OpCode::Br, labelFallThru, ldElem);
+
+        // if load is outside of range at runtime return false
+        ldElem->InsertBefore(labelReturnUndefined);
+        IR::Opnd *undef = LoadLibraryValueOpnd(ldElem, LibraryValue::ValueUndefined);
+        Lowerer::InsertMove(ldElem->GetDst(), undef, ldElem);
+        // JMP $done
+        InsertBranch(Js::OpCode::Br, labelFallThru, ldElem);
+
         // $labelCreateHeapArgs:
         ldElem->InsertBefore(labelCreateHeapArgs);
         emittedFastPath = true;

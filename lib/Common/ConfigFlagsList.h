@@ -1,6 +1,6 @@
 //-------------------------------------------------------------------------------------------------------
 // Copyright (C) Microsoft Corporation and contributors. All rights reserved.
-// Copyright (c) 2021 ChakraCore Project Contributors. All rights reserved.
+// Copyright (c) ChakraCore Project Contributors. All rights reserved.
 // Licensed under the MIT license. See LICENSE.txt file in the project root for full license information.
 //-------------------------------------------------------------------------------------------------------
 
@@ -670,17 +670,17 @@ PHASE(All)
 #define DEFAULT_CONFIG_ESNumericSeparator      (true)
 #define DEFAULT_CONFIG_ESHashbang              (true)
 #define DEFAULT_CONFIG_ESSymbolDescription     (true)
-#define DEFAULT_CONFIG_ESArrayFindFromLast     (false)
+#define DEFAULT_CONFIG_ESArrayFindFromLast     (true)
 #define DEFAULT_CONFIG_ESPromiseAny            (true)
 #define DEFAULT_CONFIG_ESNullishCoalescingOperator (true)
 #define DEFAULT_CONFIG_ESGlobalThis            (true)
 
-// Jitting generators has not been tested on ARM
-// enabled only for x86 and x64 for now
+// Jitting generator functions is not functional on ARM
+// Also still contains significant bugs on x86/x64 hence disabled
 #ifdef _M_ARM32_OR_ARM64
     #define DEFAULT_CONFIG_JitES6Generators            (false)
 #else
-    #define DEFAULT_CONFIG_JitES6Generators            (true)
+    #define DEFAULT_CONFIG_JitES6Generators            (false)
 #endif
 
 #ifdef COMPILE_DISABLE_ES6RegExPrototypeProperties
@@ -695,7 +695,6 @@ PHASE(All)
 #else
     #define DEFAULT_CONFIG_ES6RegExSymbols         (false)
 #endif
-#define DEFAULT_CONFIG_ES6HasInstance          (true)
 #define DEFAULT_CONFIG_ES7AsyncAwait           (true)
 #define DEFAULT_CONFIG_ES7ExponentionOperator  (true)
 #define DEFAULT_CONFIG_ES7TrailingComma        (true)
@@ -1180,7 +1179,6 @@ FLAGPR_REGOVR_EXP(Boolean, ES6, ES6RegExPrototypeProperties, "Enable ES6 propert
 // Also, the corresponding helpers in JnHelperMethodList.h should be marked as being reentrant
 FLAGPR_REGOVR_EXP(Boolean, ES6, ES6RegExSymbols        , "Enable ES6 RegExp symbols"                                , DEFAULT_CONFIG_ES6RegExSymbols)
 
-FLAGPR           (Boolean, ES6, ES6HasInstance         , "Enable ES6 @@hasInstance symbol"                          , DEFAULT_CONFIG_ES6HasInstance)
 FLAGPR           (Boolean, ES6, ES6Verbose             , "Enable ES6 verbose trace"                                 , DEFAULT_CONFIG_ES6Verbose)
 FLAGPR           (Boolean, ES6, ESObjectGetOwnPropertyDescriptors, "Enable Object.getOwnPropertyDescriptors"        , DEFAULT_CONFIG_ESObjectGetOwnPropertyDescriptors)
 
