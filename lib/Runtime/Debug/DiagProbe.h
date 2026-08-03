@@ -118,6 +118,7 @@ namespace Js
         uint scriptIdWhenSet;
 
         bool stepCompleteOnInlineBreakpoint;
+        bool frameDepthNeedsRefresh;
         ScriptContext *pActivatedContext;
 
         ReturnedValueList *returnedValueList;
@@ -161,6 +162,14 @@ namespace Js
         {
             this->frameAddrWhenSet = value;
         }
+
+        // A coroutine frame is copied off the stack when it suspends and is given a new address every
+        // time it resumes, so the address a step recorded for the frame it was set in stops matching
+        // that frame and the step never completes: the script runs to the end of the turn unstepped.
+        // Moves an active step onto the frame's new address, and marks the stack depth it recorded for
+        // refreshing, since the frame resumes at whatever depth script is re-entered at rather than
+        // the depth it suspended from. Does nothing unless the step was set in the frame resuming.
+        void OnCoroutineFrameResumed(DWORD_PTR previousFrameAddress, DWORD_PTR newFrameAddress);
 
         void AddToReturnedValueContainer(Js::Var returnValue, Js::JavascriptFunction * function, bool isValueOfReturnStatement);
         void AddReturnToReturnedValueContainer();

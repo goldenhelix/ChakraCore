@@ -71,6 +71,7 @@ namespace Js
         frameCountWhenSet(0),
         frameAddrWhenSet((size_t)-1),
         stepCompleteOnInlineBreakpoint(false),
+        frameDepthNeedsRefresh(false),
         pActivatedContext(NULL),
         scriptIdWhenSet(InvalidScriptId),
         returnedValueRecordingDepth(0),
@@ -107,6 +108,7 @@ namespace Js
         }
 
         this->scriptIdWhenSet = GetScriptId(functionBody);
+        this->frameDepthNeedsRefresh = false;
 
         if (this->returnedValueList == nullptr)
         {
@@ -216,6 +218,18 @@ namespace Js
         frameCountWhenSet = 0;
         scriptIdWhenSet = InvalidScriptId;
         frameAddrWhenSet = (size_t)-1;
+        frameDepthNeedsRefresh = false;
+    }
+
+    void StepController::OnCoroutineFrameResumed(DWORD_PTR previousFrameAddress, DWORD_PTR newFrameAddress)
+    {
+        if (!IsActive() || this->frameAddrWhenSet != previousFrameAddress)
+        {
+            return;
+        }
+
+        this->frameAddrWhenSet = newFrameAddress;
+        this->frameDepthNeedsRefresh = true;
     }
 
     bool StepController::IsStepComplete_AllowingFalsePositives(InterpreterStackFrame * stackFrame)
@@ -250,6 +264,16 @@ namespace Js
 
         int byteOffset = haltState->GetCurrentOffset();
         bool fCanHalt = false;
+
+        if (this->frameDepthNeedsRefresh &&
+            haltState->framePointers->Peek(0)->GetStackAddress() == this->frameAddrWhenSet)
+        {
+            // The frame this step was set in has resumed after suspending. The depth it recorded
+            // belongs to the stack it suspended from, which has since unwound, so leaving it would
+            // read as the frames below having popped and halt on the first statement reached.
+            this->frameCountWhenSet = currentFrameCount;
+            this->frameDepthNeedsRefresh = false;
+        }
 
         if (this->frameCountWhenSet > currentFrameCount && STEP_DOCUMENT != stepType)
         {
