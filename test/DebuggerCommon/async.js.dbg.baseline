@@ -40,29 +40,6 @@
   {
     "callStack": [
       {
-        "line": 15,
-        "column": 4,
-        "sourceText": "return await af1(10)",
-        "function": "af2"
-      },
-      {
-        "line": 18,
-        "column": 0,
-        "sourceText": "var p = af2()",
-        "function": "Global code"
-      }
-    ]
-  },
-  {
-    "this": "Object {...}",
-    "arguments": "Object {...}",
-    "locals": {
-      "a": "number 10"
-    }
-  },
-  {
-    "callStack": [
-      {
         "line": 11,
         "column": 4,
         "sourceText": "return await foo.call({ x : 100 })",

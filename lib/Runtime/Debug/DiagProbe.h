@@ -93,6 +93,16 @@ namespace Js
         STEP_BAILOUT    = STEP_IN | STEP_OVER,
     };
 
+    // An active step moved off the step controller for as long as the coroutine frame it was set in
+    // stays suspended. Held by that frame's generator, so it is reachable only from the frame it can
+    // complete in, and is collected with the generator if the frame is never resumed.
+    struct ParkedStep
+    {
+        Field(FunctionBody*) body;
+        Field(StepType) stepType;
+        Field(int) byteOffset;
+    };
+
     struct DebuggerOptionsCallback
     {
         virtual bool IsExceptionReportingEnabled() { return true; }
@@ -163,13 +173,16 @@ namespace Js
             this->frameAddrWhenSet = value;
         }
 
-        // A coroutine frame is copied off the stack when it suspends and is given a new address every
-        // time it resumes, so the address a step recorded for the frame it was set in stops matching
-        // that frame and the step never completes: the script runs to the end of the turn unstepped.
-        // Moves an active step onto the frame's new address, and marks the stack depth it recorded for
-        // refreshing, since the frame resumes at whatever depth script is re-entered at rather than
-        // the depth it suspended from. Does nothing unless the step was set in the frame resuming.
-        void OnCoroutineFrameResumed(DWORD_PTR previousFrameAddress, DWORD_PTR newFrameAddress);
+        // A step belongs to the frame it was set in, but a coroutine frame leaves the stack when it
+        // suspends and is given a new address every time it resumes, so a step left on the controller
+        // across a suspension both stops matching its own frame and stays free to complete in any
+        // frame that runs next. These move it onto the suspending frame and back off again, so a
+        // suspended frame is never mistaken for one that has popped and the step can only ever
+        // complete where it was set. Parking returns null unless the active step still owes this
+        // frame a statement, which is a step in or a step over set in the frame suspending;
+        // unparking a step the controller has since replaced discards it.
+        ParkedStep* ParkForSuspendedFrame(DWORD_PTR frameAddress, Recycler* recycler);
+        void UnparkForResumedFrame(ParkedStep* parked, DWORD_PTR frameAddress, ScriptContext* scriptContext);
 
         void AddToReturnedValueContainer(Js::Var returnValue, Js::JavascriptFunction * function, bool isValueOfReturnStatement);
         void AddReturnToReturnedValueContainer();

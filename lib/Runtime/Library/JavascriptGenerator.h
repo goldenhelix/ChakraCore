@@ -7,6 +7,10 @@
 namespace Js
 {
 
+#ifdef ENABLE_SCRIPT_DEBUGGING
+struct ParkedStep;
+#endif
+
 enum class ResumeYieldKind
 {
     Normal = 0,
@@ -54,12 +58,26 @@ public:
     void ThrowIfExecuting(const char16* apiName);
     Var CallGenerator(Var data, ResumeYieldKind resumeKind);
 
+#ifdef ENABLE_SCRIPT_DEBUGGING
+    // A step the debugger set in this frame belongs to this frame, so it travels with the frame
+    // rather than staying on the step controller while the frame is off the stack. Parking takes it
+    // off the controller as the frame suspends, so it cannot complete in whatever runs next;
+    // unparking puts it back as the frame resumes, at the address the frame has now. Only an async
+    // function is parked: a yield is a suspension the debugger is meant to see, since it returns to
+    // the caller.
+    void ParkActiveStep();
+    void UnparkStep(InterpreterStackFrame* resumedFrame);
+#endif
+
 private:
     Field(InterpreterStackFrame*) frame;
     Field(GeneratorState) state;
     Field(Arguments) args;
     Field(ScriptFunction*) scriptFunction;
     Field(DynamicObject*) resumeYieldObject;
+#ifdef ENABLE_SCRIPT_DEBUGGING
+    Field(ParkedStep*) parkedStep;
+#endif
 
     void SetResumeYieldProperties(Var value, ResumeYieldKind kind);
 

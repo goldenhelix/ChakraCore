@@ -2031,20 +2031,12 @@ skipThunk:
 
                 // The debugger relies on comparing stack addresses of frames to decide when a step_out is complete so
                 // give the InterpreterStackFrame a legit enough stack address to make this comparison work.
-#ifdef ENABLE_SCRIPT_DEBUGGING
-                DWORD_PTR previousStackAddress = newInstance->m_stackAddress;
-#endif
                 newInstance->m_stackAddress = reinterpret_cast<DWORD_PTR>(&generator);
 
 #ifdef ENABLE_SCRIPT_DEBUGGING
-                // A step set in this frame before it suspended recorded the address the frame had
-                // then, on a stack that has since unwound. Move the step onto the address the frame
-                // has now, so it is still recognised as the frame being stepped and can complete.
-                Js::DebugManager* debugManager = threadContext->GetDebugManager();
-                if (debugManager != nullptr)
-                {
-                    debugManager->stepController.OnCoroutineFrameResumed(previousStackAddress, newInstance->m_stackAddress);
-                }
+                // Give back the step this frame was carrying while it was suspended, now that the
+                // frame has an address again for the step to be recognised at.
+                generator->UnparkStep(newInstance);
 #endif
 
                 newInstance->retOffset = 0;

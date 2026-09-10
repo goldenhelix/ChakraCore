@@ -6,6 +6,12 @@
 #include "RuntimeLibraryPch.h"
 #include "Language/InterpreterStackFrame.h"
 
+#ifdef ENABLE_SCRIPT_DEBUGGING
+#include "Debug/DebuggingFlags.h"
+#include "Debug/DiagProbe.h"
+#include "Debug/DebugManager.h"
+#endif
+
 using namespace Js;
 
 namespace
@@ -29,7 +35,16 @@ namespace
 
         ~GeneratorStateHelper()
         {
-            generator->SetState(IsDone() ? GeneratorState::Completed : GeneratorState::Suspended);
+            bool isDone = IsDone();
+
+#ifdef ENABLE_SCRIPT_DEBUGGING
+            if (!isDone)
+            {
+                generator->ParkActiveStep();
+            }
+#endif
+
+            generator->SetState(isDone ? GeneratorState::Completed : GeneratorState::Suspended);
         }
 
         bool IsDone()
@@ -61,7 +76,11 @@ JavascriptGenerator::JavascriptGenerator(
         frame(nullptr),
         state(GeneratorState::SuspendedStart),
         scriptFunction(scriptFunction),
-        resumeYieldObject(nullptr) {}
+        resumeYieldObject(nullptr)
+#ifdef ENABLE_SCRIPT_DEBUGGING
+        , parkedStep(nullptr)
+#endif
+        {}
 
 JavascriptGenerator* JavascriptGenerator::New(
     Recycler* recycler,
@@ -115,6 +134,58 @@ bool Js::VarIsImpl<JavascriptGenerator>(RecyclableObject* obj)
     auto typeId = JavascriptOperators::GetTypeId(obj);
     return typeId == TypeIds_Generator || typeId == TypeIds_AsyncGenerator;
 }
+
+#ifdef ENABLE_SCRIPT_DEBUGGING
+void JavascriptGenerator::ParkActiveStep()
+{
+    Assert(this->parkedStep == nullptr);
+
+    if (this->frame == nullptr)
+    {
+        return;
+    }
+
+    // Only a frame that resumes itself can carry its step away, because only its suspension is
+    // invisible to the debugger. A yield hands control back to whoever asked the generator for a
+    // value, which is where a step taken before it is meant to complete. A module body is compiled
+    // as a generator too, but top level await is the only way it suspends, so it resumes itself the
+    // way an async function does.
+    FunctionProxy* proxy = this->scriptFunction->GetFunctionProxy();
+    if (!proxy->IsAsync() || (proxy->IsGenerator() && !this->IsAsyncModule()))
+    {
+        return;
+    }
+
+    ScriptContext* scriptContext = GetScriptContext();
+    DebugManager* debugManager = scriptContext->GetThreadContext()->GetDebugManager();
+
+    if (debugManager != nullptr)
+    {
+        this->parkedStep = debugManager->stepController.ParkForSuspendedFrame(
+            this->frame->GetStackAddress(), scriptContext->GetRecycler());
+    }
+}
+
+void JavascriptGenerator::UnparkStep(InterpreterStackFrame* resumedFrame)
+{
+    if (this->parkedStep == nullptr)
+    {
+        return;
+    }
+
+    ParkedStep* parked = this->parkedStep;
+    this->parkedStep = nullptr;
+
+    ScriptContext* scriptContext = GetScriptContext();
+    DebugManager* debugManager = scriptContext->GetThreadContext()->GetDebugManager();
+
+    if (debugManager != nullptr)
+    {
+        debugManager->stepController.UnparkForResumedFrame(
+            parked, resumedFrame->GetStackAddress(), scriptContext);
+    }
+}
+#endif
 
 void JavascriptGenerator::SetFrame(InterpreterStackFrame* frame, size_t bytes)
 {

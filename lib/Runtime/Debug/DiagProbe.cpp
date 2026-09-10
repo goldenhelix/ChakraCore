@@ -221,15 +221,56 @@ namespace Js
         frameDepthNeedsRefresh = false;
     }
 
-    void StepController::OnCoroutineFrameResumed(DWORD_PTR previousFrameAddress, DWORD_PTR newFrameAddress)
+    ParkedStep* StepController::ParkForSuspendedFrame(DWORD_PTR frameAddress, Recycler* recycler)
     {
-        if (!IsActive() || this->frameAddrWhenSet != previousFrameAddress)
+        // A step out is an instruction about where the frame goes, not about the next statement in
+        // it, and a suspension is the frame giving up control: it is already complete by the time
+        // the frame suspends. Only a step that still owes the frame a statement travels with it.
+        if (!IsActive() || (this->stepType != STEP_IN && this->stepType != STEP_OVER) ||
+            this->frameAddrWhenSet != frameAddress)
         {
+            return nullptr;
+        }
+
+        ParkedStep* parked = RecyclerNew(recycler, ParkedStep);
+        parked->body = this->body;
+        parked->stepType = this->stepType;
+        parked->byteOffset = this->byteOffset;
+
+        Deactivate();
+
+        return parked;
+    }
+
+    void StepController::UnparkForResumedFrame(ParkedStep* parked, DWORD_PTR frameAddress, ScriptContext* scriptContext)
+    {
+        Assert(parked);
+
+        if (IsActive())
+        {
+            // The debugger has been given a newer step since this one was parked, and that is the
+            // one the user is waiting on.
             return;
         }
 
-        this->frameAddrWhenSet = newFrameAddress;
+        this->stepType = parked->stepType;
+        this->byteOffset = parked->byteOffset;
+        this->pActivatedContext = scriptContext;
+        this->body.Root(parked->body, scriptContext->GetRecycler());
+        this->statementMap = parked->body->GetMatchingStatementMapFromByteCode(parked->byteOffset, false);
+        this->frameAddrWhenSet = frameAddress;
+        this->scriptIdWhenSet = GetScriptId(parked->body);
+
+        // A frame resumes at whatever depth script is re-entered at rather than the depth it
+        // suspended from, so the depth this step compares against is not known here and is
+        // established at the next halt instead.
         this->frameDepthNeedsRefresh = true;
+
+        if (this->returnedValueList == nullptr)
+        {
+            this->returnedValueList = JsUtil::List<ReturnedValue*>::New(scriptContext->GetRecycler());
+            scriptContext->GetThreadContext()->SetReturnedValueList(this->returnedValueList);
+        }
     }
 
     bool StepController::IsStepComplete_AllowingFalsePositives(InterpreterStackFrame * stackFrame)
@@ -265,14 +306,25 @@ namespace Js
         int byteOffset = haltState->GetCurrentOffset();
         bool fCanHalt = false;
 
-        if (this->frameDepthNeedsRefresh &&
-            haltState->framePointers->Peek(0)->GetStackAddress() == this->frameAddrWhenSet)
+        if (this->frameDepthNeedsRefresh)
         {
-            // The frame this step was set in has resumed after suspending. The depth it recorded
-            // belongs to the stack it suspended from, which has since unwound, so leaving it would
-            // read as the frames below having popped and halt on the first statement reached.
-            this->frameCountWhenSet = currentFrameCount;
+            // The frame this step was set in has resumed after suspending, so the depth recorded
+            // when the step was set belongs to the stack it suspended from, which has since
+            // unwound. Take the depth the frame sits at now instead. A frame that resumed and then
+            // returned without reaching a statement is no longer here to be found, so leave a depth
+            // that reads as popped and let the step complete where the frame went, rather than
+            // leaving it waiting for a frame that will never be seen again.
             this->frameDepthNeedsRefresh = false;
+            this->frameCountWhenSet = currentFrameCount + 1;
+
+            for (int index = 0; index < currentFrameCount; index++)
+            {
+                if (haltState->framePointers->Peek(index)->GetStackAddress() == this->frameAddrWhenSet)
+                {
+                    this->frameCountWhenSet = currentFrameCount - index;
+                    break;
+                }
+            }
         }
 
         if (this->frameCountWhenSet > currentFrameCount && STEP_DOCUMENT != stepType)
