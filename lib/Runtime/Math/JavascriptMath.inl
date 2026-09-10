@@ -271,7 +271,7 @@ namespace Js
             return NumberUtilities::Modulus(dblLeft, dblRight);
         }
 
-#if defined(_M_ARM32_OR_ARM64)
+#if defined(_M_ARM32_OR_ARM64) || defined(SATURATING_FLOAT_CASTS)
         inline int32 JavascriptMath::ToInt32Core(double T1)
         {
             JIT_HELPER_NOT_REENTRANT_NOLOCK_HEADER(Conv_ToInt32Core);

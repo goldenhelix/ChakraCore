@@ -93,7 +93,7 @@ namespace Js
         }
         else
 #endif
-#if defined(_M_ARM32_OR_ARM64)
+#if defined(_M_ARM32_OR_ARM64) || defined(SATURATING_FLOAT_CASTS)
         // Win8 286065: ARM: casts to int64 from double for NaNs, infinity, overflow:
         // - non-infinity NaNs -> 0
         // - infinity NaNs: -1.#INF -> 0x8000000000000000, 1.#INF  -> 0x7FFFFFFFFFFFFFFF.
@@ -118,7 +118,7 @@ namespace Js
             T4_64 = static_cast<INT64>(T1);
         }
 
-#if defined(_M_ARM32_OR_ARM64)
+#if defined(_M_ARM32_OR_ARM64) || defined(SATURATING_FLOAT_CASTS)
         if (T4_64 == Neg_InvalidInt64)
         {
             // Win8 391983: what happens in 64bit overflow is not spec'd. On ARM T4_64 would be 0x7F..FF but if we extend
@@ -135,7 +135,7 @@ namespace Js
     // Returns true <=> TryToInt64() call resulted in a valid value.
     NUMBER_UTIL_INLINE bool NumberUtilities::IsValidTryToInt64(__int64 value)
     {
-#if defined(_M_ARM32_OR_ARM64)
+#if defined(_M_ARM32_OR_ARM64) || defined(SATURATING_FLOAT_CASTS)
         return value != Pos_InvalidInt64 && value != Neg_InvalidInt64;
 #else
         return value != Pos_InvalidInt64;

@@ -438,6 +438,15 @@ if(CLR_CMAKE_PLATFORM_XPLAT)
         -fasm-blocks
         -fms-extensions
         -fwrapv # Treat signed integer overflow as two's complement
+        # Give an overflowing float-to-int cast a defined result instead of being undefined. The
+        # engine casts first and checks afterwards, e.g. FDblIsInt32 decides whether a double is an
+        # int32 by casting and comparing the round trip, which only works when the out-of-range
+        # cast produces a value. Clang 22 otherwise folds such checks to always-int32, which turned
+        # every whole-number literal above INT32_MAX into INT32_MIN. Clang implements the flag as a
+        # saturating conversion with NaN going to zero, which is ARM's native behavior, so the
+        # matching macro routes the sentinel-checking conversion helpers to their ARM variants.
+        -fno-strict-float-cast-overflow
+        -DSATURATING_FLOAT_CASTS=1
     )
 
     # Only disable RTTI in release builds so that TrackAlloc works for debug and test builds

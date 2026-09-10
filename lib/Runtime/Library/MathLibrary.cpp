@@ -355,7 +355,7 @@ namespace Js
             }
 
             double x = JavascriptConversion::ToNumber(inputArg, scriptContext);
-#if defined(_M_ARM32_OR_ARM64)
+#if defined(_M_ARM32_OR_ARM64) || defined(SATURATING_FLOAT_CASTS)
             if (Js::JavascriptNumber::IsNan(x))
             {
                 return scriptContext->GetLibrary()->GetNaN();
@@ -547,7 +547,7 @@ namespace Js
             }
 
             double x = JavascriptConversion::ToNumber(input, scriptContext);
-#if defined(_M_ARM32_OR_ARM64)
+#if defined(_M_ARM32_OR_ARM64) || defined(SATURATING_FLOAT_CASTS)
             if (Js::JavascriptNumber::IsNan(x))
             {
                 return scriptContext->GetLibrary()->GetNaN();
