@@ -3055,6 +3055,13 @@ Recycler::Sweep(bool concurrent)
         concurrent = false;
     }
 
+#ifdef RECYCLER_VERIFY_MARK
+    if (GetRecyclerFlagsTable().RecyclerVerifyMark)
+    {
+        this->VerifyMark();
+    }
+#endif
+
     RECYCLER_PROFILE_EXEC_BEGIN(this, concurrent? Js::ConcurrentSweepPhase : Js::SweepPhase);
 
 #if ENABLE_PARTIAL_GC
