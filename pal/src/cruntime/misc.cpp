@@ -42,6 +42,7 @@ Abstract:
 SET_DEFAULT_DEBUG_CHANNEL(CRT);
 
 char **palEnvironment = NULL;
+static BOOL palEnvironmentOwned = FALSE;
 
 CRITICAL_SECTION gcsEnvironment;
 
@@ -276,6 +277,34 @@ MiscGetEnvArray(void)
 
 /*++
 Function:
+  MiscSyncEnvArray
+
+The process may replace its environ array behind the PAL's back (libc
+reallocates it on setenv). Re-read it so palEnvironment never dangles.
+Once the array is no longer the PAL's own allocation it must not be
+reallocated by MiscPutenv.
+
+NOTE: This function MUST be called while holding the gcsEnvironment
+      critical section
+--*/
+static void
+MiscSyncEnvArray(void)
+{
+#if HAVE__NSGETENVIRON
+    char **current = *(_NSGetEnviron());
+#else   // HAVE__NSGETENVIRON
+    extern char **environ;
+    char **current = environ;
+#endif  // HAVE__NSGETENVIRON
+    if (current != palEnvironment)
+    {
+        palEnvironment = current;
+        palEnvironmentOwned = FALSE;
+    }
+}
+
+/*++
+Function:
   MiscSetEnvArray
 
 Make sure the process's environ array is in sync with palEnvironment variable
@@ -355,6 +384,7 @@ char *MiscGetenv(const char *name)
     CPalThread * pthrCurrent = InternalGetCurrentThread();
 
     InternalEnterCriticalSection(pthrCurrent, &gcsEnvironment);
+    MiscSyncEnvArray();
 
     if (palEnvironment)
     {
@@ -443,6 +473,7 @@ BOOL MiscPutenv(const char *string, BOOL deleteIfEmpty)
 
         InternalEnterCriticalSection(pthrCurrent, &gcsEnvironment);
         fOwningCS = true;
+        MiscSyncEnvArray();
 
         for(i = 0; palEnvironment[i] != NULL; i++)
         {
@@ -475,13 +506,12 @@ BOOL MiscPutenv(const char *string, BOOL deleteIfEmpty)
         }
         if (palEnvironment[i] == NULL)
         {
-            static BOOL sAllocatedEnviron = FALSE;
             // Add a new environment variable.
             // We'd like to realloc palEnvironment, but we can't do that the
             // first time through.
             char **newEnviron = NULL;
 
-            if (sAllocatedEnviron) {
+            if (palEnvironmentOwned) {
                 if (NULL == (newEnviron =
                         (char **)InternalRealloc(palEnvironment, (i + 2) * sizeof(char *))))
                 {
@@ -500,7 +530,7 @@ BOOL MiscPutenv(const char *string, BOOL deleteIfEmpty)
                 {
                     newEnviron[j] = palEnvironment[j];
                 }
-                sAllocatedEnviron = TRUE;
+                palEnvironmentOwned = TRUE;
             }
             palEnvironment = newEnviron;
             MiscSetEnvArray();
@@ -543,6 +573,7 @@ void MiscUnsetenv(const char *name)
     length = strlen(name);
 
     InternalEnterCriticalSection(pthrCurrent, &gcsEnvironment);
+    MiscSyncEnvArray();
     for(i = 0; palEnvironment[i] != NULL; i++)
     {
         equals = strchr(palEnvironment[i], '=');
